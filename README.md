@@ -164,13 +164,14 @@ export no_proxy="$NO_PROXY"
 当前仓库已经补充了 Hermes 的客户端接入资产：
 
 - [Hermes Integration README](/Users/mako/Lab/VaultMind/clients/hermes/README.md)
-- [Hermes MemoryOS Skill](/Users/mako/Lab/VaultMind/clients/hermes/skills/memoryos/SKILL.md)
+- [Hermes VaultMind Skill](/Users/mako/Lab/VaultMind/clients/hermes/skills/vaultmind/SKILL.md)
+- [Hermes VaultMind Script](/Users/mako/Lab/VaultMind/clients/hermes/skills/vaultmind/scripts/vaultmind_memory.py)
 
 对 Hermes 的接入结论是：
 
 - Hermes 支持 skill，但默认持久记忆不是单靠 skill 扩展出来的。
-- 如果要让 MemoryOS 接管 Hermes 的默认记忆，必须替换 Hermes `memory` 工具背后的 `MemoryStore` 后端。
-- 当前实现采用“有 `MEMORYOS_*` 环境变量时走 MemoryOS API，没有时回退本地 `MEMORY.md`/`USER.md` 文件”的兼容模式。
+- 如果要让 MemoryOS 接管 Hermes 的默认记忆，必须替换 Hermes `memory` 工具背后的 `MemoryStore` 后端，这条路升级风险过高。
+- 当前推荐实现改为“双记忆并行”：保留 Hermes 原生 `memory`，同时通过 VaultMind skill 和脚本接入外部记忆检索与写入。
 
 ## Remote Status
 

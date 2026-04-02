@@ -1,28 +1,33 @@
 # Hermes Client Integration
 
-这个目录存放 Hermes Agent 接入 MemoryOS 的客户端资产。
+这个目录存放 Hermes Agent 以 `skill` 方式接入 VaultMind 的客户端资产。
 
-当前设计结论：
+当前采用的正式方案是“双记忆系统并行”：
 
-- Hermes 确实支持 `skill`，用户级技能目录位于 `~/.hermes/skills/`。
-- 但 Hermes 的默认持久记忆不是单纯靠 skill 扩展出来的，而是内建 `memory` 工具和 `MemoryStore` 后端。
-- 因此想让 MemoryOS 接管 Hermes 默认记忆，必须替换 `tools/memory_tool.py` 的后端，而不是只安装一个新 skill。
+- Hermes 原生 `memory` 保持不变。
+- VaultMind 作为第二套外部记忆系统，由 skill 指导 Hermes 通过脚本调用 API。
+- 两套记忆可以同时使用，但互不替换、互不接管。
 
-当前接入方案：
+这样做的原因很明确：
 
-1. Hermes 的 `memory` 工具保持原接口不变。
-2. 当检测到 `MEMORYOS_BASE_URL`、`MEMORYOS_API_KEY`、`MEMORYOS_AGENT_ID` 等环境变量时，`MemoryStore` 自动改走 MemoryOS API。
-3. 若未配置这些变量，则继续回退到原本的 `~/.hermes/memories/MEMORY.md` / `USER.md` 文件后端。
+- Hermes 支持 `skill`，用户级技能目录位于 `~/.hermes/skills/`。
+- 但 Hermes 默认持久记忆不是稳定的外部扩展点。
+- 如果强行接管默认记忆，就必须改 Hermes 源码，升级时风险不可控。
 
-配套 skill 位于：
+所以 Hermes 侧的推荐模式是：
 
-- [SKILL.md](/Users/mako/Lab/VaultMind/clients/hermes/skills/memoryos/SKILL.md)
-- [Hermes Patch](/Users/mako/Lab/VaultMind/clients/hermes/patches/hermes-memoryos.patch)
+1. 用 Hermes 原生 `memory` 保存它自己的轻量本地记忆。
+2. 用 VaultMind skill 处理更强的跨会话检索、项目事实、结构化长期记忆。
+3. 在需要的时候双写，两边同时保存。
 
-这份 skill 主要用于：
+当前配套 skill 位于：
 
-- 告诉 Hermes 当前环境里 `memory` 已由 MemoryOS 接管
-- 约束模型继续使用原生 `memory` 工具接口，而不是自己发明一套新流程
-- 在需要排查时提供调试命令
+- [VaultMind Skill](/Users/mako/Lab/VaultMind/clients/hermes/skills/vaultmind/SKILL.md)
+- [VaultMind Script](/Users/mako/Lab/VaultMind/clients/hermes/skills/vaultmind/scripts/vaultmind_memory.py)
+- [VaultMind Env Example](/Users/mako/Lab/VaultMind/clients/hermes/vaultmind.env.example)
 
-补丁文件则用于把 Hermes 自带的 `tools/memory_tool.py` 切换为 MemoryOS 后端优先、文件后端回退的兼容实现。
+这套资产的作用是：
+
+- 让 Hermes 明确知道 VaultMind 是并行记忆，而不是默认 memory 的替代品
+- 提供可直接从 `terminal` 工具调用的记忆脚本
+- 避免对 Hermes 上游源码做任何侵入式修改
