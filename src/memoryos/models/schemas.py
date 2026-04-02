@@ -158,6 +158,10 @@ class ActiveContextRefreshRequest(BaseModel):
     weights: ActiveContextWeights = Field(default_factory=ActiveContextWeights)
 
 
+class SessionRequest(BaseModel):
+    session_id: str
+
+
 class ActiveContextRecord(BaseModel):
     session_id: str
     agent: str

@@ -77,3 +77,126 @@ def test_candidate_commit_retrieve_and_isolation(tmp_path: Path) -> None:
     ids = {item["id"] for item in isolated_response.json()}
     assert memory_id in ids
     assert all("Morgan 的命名空间应与 Nexus 隔离。" != item["summary"] for item in isolated_response.json())
+
+
+def test_active_context_auth_and_reset(tmp_path: Path) -> None:
+    settings = Settings(data_root=tmp_path / "data")
+    client = TestClient(create_app(settings))
+
+    client.post(
+        "/api/v1/candidate/store",
+        json={
+            "session_id": "ctx_session",
+            "text": "Nexus 正在整理 MemoryOS 部署方案。",
+            "summary": "Nexus 正在整理部署方案。",
+            "tags": ["部署"],
+            "entities": ["Nexus", "MemoryOS"],
+        },
+        headers=_headers("nexus"),
+    )
+    client.post("/api/v1/commit/run-once", json={"limit": 10}, headers=_headers("nexus"))
+
+    refresh_response = client.post(
+        "/api/v1/active-context/refresh",
+        json={"session_id": "ctx_session", "current_topic": "deployment"},
+        headers=_headers("nexus"),
+    )
+    assert refresh_response.status_code == 200
+    assert refresh_response.json()["current_topic"] == "deployment"
+    assert refresh_response.json()["recent_memory_ids"]
+
+    get_response = client.get(
+        "/api/v1/active-context",
+        params={"session_id": "ctx_session"},
+        headers=_headers("nexus"),
+    )
+    assert get_response.status_code == 200
+    assert get_response.json()["session_id"] == "ctx_session"
+
+    forbidden_response = client.get(
+        "/api/v1/active-context",
+        params={"session_id": "ctx_session"},
+        headers={"X-Api-Key": "dev-nexus-key", "X-Agent-Id": "morgan"},
+    )
+    assert forbidden_response.status_code == 403
+
+    reset_response = client.post(
+        "/api/v1/active-context/reset",
+        json={"session_id": "ctx_session"},
+        headers=_headers("nexus"),
+    )
+    assert reset_response.status_code == 200
+    assert reset_response.json()["deleted"] is True
+
+    missing_response = client.get(
+        "/api/v1/active-context",
+        params={"session_id": "ctx_session"},
+        headers=_headers("nexus"),
+    )
+    assert missing_response.status_code == 404
+
+
+def test_dedup_and_agentic_retrieval(tmp_path: Path) -> None:
+    settings = Settings(data_root=tmp_path / "data")
+    client = TestClient(create_app(settings))
+
+    first = client.post(
+        "/api/v1/candidate/store",
+        json={
+            "session_id": "agentic_001",
+            "text": "MemoryOS 改成先服务端后 Skill，因为这样更容易调试和回滚。",
+            "summary": "MemoryOS 先服务端后 Skill，理由是调试和回滚更容易。",
+            "tags": ["原则", "顺序"],
+            "entities": ["MemoryOS", "Skill"],
+            "memory_type_hint": "relational",
+            "metadata": {"relation": "decision_reason"},
+        },
+        headers=_headers("nexus"),
+    )
+    second = client.post(
+        "/api/v1/candidate/store",
+        json={
+            "session_id": "agentic_001",
+            "text": "MemoryOS 改成先服务端后 Skill，因为这样更容易调试和回滚。",
+            "summary": "MemoryOS 先服务端后 Skill，理由是调试和回滚更容易。",
+            "tags": ["原则", "顺序"],
+            "entities": ["MemoryOS", "Skill"],
+            "memory_type_hint": "relational",
+            "metadata": {"relation": "decision_reason"},
+        },
+        headers=_headers("nexus"),
+    )
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    first_commit = client.post(
+        "/api/v1/commit/run-item/" + first.json()["id"],
+        headers=_headers("nexus"),
+    )
+    second_commit = client.post(
+        "/api/v1/commit/run-item/" + second.json()["id"],
+        headers=_headers("nexus"),
+    )
+    assert first_commit.status_code == 200
+    assert second_commit.status_code == 200
+    assert first_commit.json()["action"] == "committed"
+    assert second_commit.json()["action"] == "deduped"
+    assert second_commit.json()["memory_id"] == first_commit.json()["memory_id"]
+
+    retrieve_response = client.post(
+        "/api/v1/memory/retrieve",
+        json={
+            "query": "为什么 MemoryOS 要先做服务端？",
+            "mode": "agentic",
+            "limit": 3,
+            "include_body": True,
+            "session_id": "agentic_001",
+        },
+        headers=_headers("nexus"),
+    )
+    assert retrieve_response.status_code == 200
+    payload = retrieve_response.json()
+    assert payload["mode"] == "agentic"
+    assert payload["rounds"] >= 1
+    assert payload["results"]
+    assert "调试和回滚" in payload["results"][0]["body"]

@@ -16,6 +16,7 @@ from memoryos.models.schemas import (
     MemoryRecord,
     MemoryRetrieveRequest,
     MemoryRetrieveResponse,
+    SessionRequest,
 )
 from memoryos.services.commit import CommitService
 from memoryos.services.retrieval import RetrievalService
@@ -204,7 +205,7 @@ def refresh_active_context(
 
 @router.post("/active-context/reset")
 def reset_active_context(
-    payload: ActiveContextRefreshRequest,
+    payload: SessionRequest,
     request: Request,
     agent_context: AgentContext = Depends(require_agent),
 ) -> dict[str, object]:

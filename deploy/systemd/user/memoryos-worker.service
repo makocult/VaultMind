@@ -1,0 +1,10 @@
+[Unit]
+Description=MemoryOS Worker Run
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/VaultMind
+EnvironmentFile=%h/.config/memoryos.env
+ExecStart=/usr/bin/python3 -m memoryos.cli.worker nexus --limit 100 --reindex
