@@ -259,3 +259,16 @@ def test_direct_memory_create_patch_and_delete(tmp_path: Path) -> None:
 
     missing_response = client.get(f"/api/v1/memory/{memory_id}", headers=_headers("nexus"))
     assert missing_response.status_code == 404
+
+
+def test_console_routes_are_served(tmp_path: Path) -> None:
+    settings = Settings(data_root=tmp_path / "data")
+    client = TestClient(create_app(settings))
+
+    page_response = client.get("/console")
+    assert page_response.status_code == 200
+    assert "VaultMind Console" in page_response.text
+
+    asset_response = client.get("/console/assets/console.js")
+    assert asset_response.status_code == 200
+    assert "refreshOverview" in asset_response.text

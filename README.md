@@ -159,6 +159,23 @@ export no_proxy="$NO_PROXY"
 - `http://100.93.59.21:8765/readyz` 在 tailnet 对等端可访问
 - 如果客户端启用了 `HTTP_PROXY`/`HTTPS_PROXY`，必须通过 `NO_PROXY` 排除这两个地址
 
+## Console
+
+当前服务已经内置了一个控制台：
+
+- 控制台：`http://127.0.0.1:8765/console`
+- OpenAPI 文档：`http://127.0.0.1:8765/docs`
+
+控制台第一版提供：
+
+- Agent 选择与 API Key 本地保存
+- 服务概览与基础统计
+- 记忆检索实验室
+- Memory 浏览与详情查看
+- Candidate 队列查看
+- Active Context 读取、刷新、重置
+- Flush queue / rebuild index 等维护动作
+
 ## Hermes Client
 
 当前仓库已经补充了 Hermes 的客户端接入资产：
