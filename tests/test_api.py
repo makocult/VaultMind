@@ -200,3 +200,62 @@ def test_dedup_and_agentic_retrieval(tmp_path: Path) -> None:
     assert payload["rounds"] >= 1
     assert payload["results"]
     assert "调试和回滚" in payload["results"][0]["body"]
+
+
+def test_direct_memory_create_patch_and_delete(tmp_path: Path) -> None:
+    settings = Settings(data_root=tmp_path / "data")
+    client = TestClient(create_app(settings))
+
+    create_response = client.post(
+        "/api/v1/memory/create",
+        json={
+            "session_id": "hermes_memory_session",
+            "memory_type": "semantic",
+            "source_type": "hermes-memory-tool",
+            "source_ref": "hermes://memory/memory",
+            "summary": "Hermes should keep replies concise.",
+            "body": "Hermes should keep replies concise.",
+            "tags": ["hermes", "hermes-memory", "hermes-target:memory"],
+            "entities": ["Hermes"],
+            "stability": "high",
+            "importance": 0.85,
+            "confidence": 0.9,
+        },
+        headers=_headers("nexus"),
+    )
+    assert create_response.status_code == 200
+    created = create_response.json()
+    assert created["summary"] == "Hermes should keep replies concise."
+    assert created["body"] == "Hermes should keep replies concise."
+    assert "hermes-memory" in created["tags"]
+
+    memory_id = created["id"]
+    list_response = client.post(
+        "/api/v1/memory/list",
+        json={"limit": 10, "tags": ["hermes-memory"]},
+        headers=_headers("nexus"),
+    )
+    assert list_response.status_code == 200
+    assert any(item["id"] == memory_id for item in list_response.json())
+
+    patch_response = client.patch(
+        f"/api/v1/memory/{memory_id}",
+        json={
+            "summary": "Hermes should keep replies very concise.",
+            "body": "Hermes should keep replies very concise.",
+            "tags": ["hermes", "hermes-memory", "hermes-target:memory", "updated"],
+        },
+        headers=_headers("nexus"),
+    )
+    assert patch_response.status_code == 200
+    patched = patch_response.json()
+    assert patched["summary"] == "Hermes should keep replies very concise."
+    assert patched["body"] == "Hermes should keep replies very concise."
+    assert "updated" in patched["tags"]
+
+    delete_response = client.delete(f"/api/v1/memory/{memory_id}", headers=_headers("nexus"))
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] is True
+
+    missing_response = client.get(f"/api/v1/memory/{memory_id}", headers=_headers("nexus"))
+    assert missing_response.status_code == 404

@@ -11,6 +11,7 @@ from memoryos.models.schemas import (
     CandidateStoreRequest,
     CommitRunRequest,
     CommitRunResponse,
+    MemoryCreateRequest,
     MemoryListRequest,
     MemoryPatchRequest,
     MemoryRecord,
@@ -18,6 +19,7 @@ from memoryos.models.schemas import (
     MemoryRetrieveResponse,
     SessionRequest,
 )
+from memoryos.core.time import now_iso
 from memoryos.services.commit import CommitService
 from memoryos.services.retrieval import RetrievalService
 from memoryos.services.router import MemoryRouter
@@ -126,6 +128,41 @@ def get_memory(
     if not memory:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="memory not found")
     return memory
+
+
+@router.post("/memory/create", response_model=MemoryRecord)
+def create_memory(
+    payload: MemoryCreateRequest,
+    request: Request,
+    agent_context: AgentContext = Depends(require_agent),
+) -> MemoryRecord:
+    store = _store_for(request, agent_context)
+    memory = store.new_memory_template(
+        memory_type=payload.memory_type,
+        session_id=payload.session_id,
+        source_type=payload.source_type,
+        source_ref=payload.source_ref,
+        timestamp=payload.timestamp or now_iso(),
+        summary=payload.summary,
+        tags=payload.tags,
+        entities=payload.entities,
+    )
+    memory.importance = payload.importance
+    memory.confidence = payload.confidence
+    memory.evidence_score = payload.evidence_score
+    memory.recency_score = payload.recency_score
+    memory.consistency_score = payload.consistency_score
+    memory.source_count = payload.source_count
+    memory.stability = payload.stability
+    memory.related_ids = payload.related_ids
+    memory.supersedes = payload.supersedes
+    memory.contradicts = payload.contradicts
+    memory.merged_from = payload.merged_from
+    store.create_memory(memory, body_markdown=payload.body)
+    created = store.get_memory(memory.id, include_body=True)
+    if not created:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="memory create failed")
+    return created
 
 
 @router.post("/memory/list", response_model=list[MemoryRecord])

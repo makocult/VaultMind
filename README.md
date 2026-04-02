@@ -49,6 +49,7 @@ memoryos-api
 - `POST /commit/run-item/{candidate_id}`
 - `POST /commit/reindex`
 - `POST /memory/retrieve`
+- `POST /memory/create`
 - `GET /memory/{memory_id}`
 - `POST /memory/list`
 - `PATCH /memory/{memory_id}`
@@ -157,6 +158,19 @@ export no_proxy="$NO_PROXY"
 - `http://127.0.0.1:8765/readyz` 在服务器本机可访问
 - `http://100.93.59.21:8765/readyz` 在 tailnet 对等端可访问
 - 如果客户端启用了 `HTTP_PROXY`/`HTTPS_PROXY`，必须通过 `NO_PROXY` 排除这两个地址
+
+## Hermes Client
+
+当前仓库已经补充了 Hermes 的客户端接入资产：
+
+- [Hermes Integration README](/Users/mako/Lab/VaultMind/clients/hermes/README.md)
+- [Hermes MemoryOS Skill](/Users/mako/Lab/VaultMind/clients/hermes/skills/memoryos/SKILL.md)
+
+对 Hermes 的接入结论是：
+
+- Hermes 支持 skill，但默认持久记忆不是单靠 skill 扩展出来的。
+- 如果要让 MemoryOS 接管 Hermes 的默认记忆，必须替换 Hermes `memory` 工具背后的 `MemoryStore` 后端。
+- 当前实现采用“有 `MEMORYOS_*` 环境变量时走 MemoryOS API，没有时回退本地 `MEMORY.md`/`USER.md` 文件”的兼容模式。
 
 ## Remote Status
 

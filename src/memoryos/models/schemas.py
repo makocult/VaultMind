@@ -95,6 +95,29 @@ class MemoryPatchRequest(BaseModel):
     related_ids: list[str] | None = None
 
 
+class MemoryCreateRequest(BaseModel):
+    session_id: str
+    memory_type: MemoryType
+    source_type: str = "api"
+    source_ref: str | None = None
+    timestamp: str | None = None
+    summary: str = Field(min_length=1)
+    body: str = ""
+    importance: float = Field(default=0.5, ge=0.0, le=1.0)
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    evidence_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    recency_score: float = Field(default=1.0, ge=0.0, le=1.0)
+    consistency_score: float = Field(default=0.7, ge=0.0, le=1.0)
+    source_count: int = Field(default=1, ge=1)
+    stability: Literal["low", "medium", "high"] = "medium"
+    tags: list[str] = Field(default_factory=list)
+    entities: list[str] = Field(default_factory=list)
+    related_ids: list[str] = Field(default_factory=list)
+    supersedes: list[str] = Field(default_factory=list)
+    contradicts: list[str] = Field(default_factory=list)
+    merged_from: list[str] = Field(default_factory=list)
+
+
 class MemoryRecord(BaseModel):
     id: str
     agent: str
