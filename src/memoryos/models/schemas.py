@@ -85,6 +85,11 @@ class MemoryListRequest(BaseModel):
 
 
 class MemoryPatchRequest(BaseModel):
+    memory_type: MemoryType | None = None
+    session_id: str | None = None
+    source_type: str | None = None
+    source_ref: str | None = None
+    timestamp: str | None = None
     summary: str | None = None
     body: str | None = None
     importance: float | None = Field(default=None, ge=0.0, le=1.0)

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     metrics_port: int = 8766
     data_root: Path = Field(default_factory=lambda: Path("var/data"))
     api_keys_json: str = '{"nexus":"dev-nexus-key","morgan":"dev-morgan-key","anya":"dev-anya-key"}'
+    allow_agent_header_auth: bool | None = None
     default_limit: int = 8
     max_retrieve_limit: int = 20
     interleave_round_limit: int = 2
@@ -34,6 +35,16 @@ class Settings(BaseSettings):
     @property
     def agents(self) -> list[str]:
         return list(self.api_keys.keys())
+
+    @property
+    def agent_header_auth_enabled(self) -> bool:
+        if self.allow_agent_header_auth is not None:
+            return self.allow_agent_header_auth
+        return self.app_env != "production"
+
+    @property
+    def console_auth_mode(self) -> str:
+        return "agent_header" if self.agent_header_auth_enabled else "api_key"
 
     def agent_for_api_key(self, api_key: str) -> str | None:
         for agent, key in self.api_keys.items():

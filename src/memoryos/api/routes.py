@@ -44,6 +44,8 @@ def readyz(request: Request) -> dict[str, object]:
         "status": "ready",
         "agents": runtime.settings.agents,
         "data_root": str(runtime.settings.data_root),
+        "default_agent": runtime.settings.default_agent,
+        "auth_mode": runtime.settings.console_auth_mode,
     }
 
 

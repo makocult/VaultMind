@@ -12,208 +12,159 @@
         <div class="brand">
           <p class="eyebrow">VaultMind</p>
           <h1>Memory Console</h1>
-          <p class="lede">把服务端记忆系统变成能看、能管、能检索的工作台。</p>
+          <p class="lede">轻量管理不同 Agent 的记忆，只做导入、浏览、编辑和删除。</p>
         </div>
 
-        <section class="panel control-panel">
+        <section class="panel stack">
           <div class="panel-title-row">
-            <h2>连接</h2>
+            <h2>Agent</h2>
             <span class="status-dot" id="connection-dot"></span>
           </div>
           <label class="field">
-            <span>Agent</span>
+            <span>当前 Agent</span>
             <select id="agent-select"></select>
           </label>
-          <label class="field">
+          <label class="field hidden" id="api-key-row">
             <span>API Key</span>
-            <input id="api-key-input" type="password" placeholder="输入该 Agent 的 X-Api-Key" />
+            <input id="api-key-input" type="password" placeholder="仅在严格模式下需要" />
           </label>
+          <p class="hint" id="auth-hint">正在读取连接模式…</p>
           <div class="button-row">
-            <button id="save-connection" class="button button-primary" type="button">保存连接</button>
-            <button id="check-connection" class="button button-secondary" type="button">测试</button>
+            <button id="new-memory" class="button button-primary" type="button">手动导入</button>
+            <button id="refresh-overview" class="button button-secondary" type="button">刷新</button>
           </div>
-          <p class="hint">控制台会把连接信息保存在当前浏览器的本地存储中。</p>
         </section>
 
-        <section class="panel nav-panel">
-          <h2>工作区</h2>
-          <nav class="nav-list">
-            <a href="#overview">概览</a>
-            <a href="#retrieval">检索实验室</a>
-            <a href="#memories">记忆浏览</a>
-            <a href="#candidates">候选队列</a>
-            <a href="#context">Active Context</a>
-            <a href="#maintenance">维护操作</a>
-          </nav>
+        <section class="panel stack">
+          <h2>概览</h2>
+          <div class="stat-list">
+            <div class="stat-item">
+              <span>服务</span>
+              <strong id="metric-service">-</strong>
+            </div>
+            <div class="stat-item">
+              <span>默认 Agent</span>
+              <strong id="metric-default-agent">-</strong>
+            </div>
+            <div class="stat-item">
+              <span>已提交记忆</span>
+              <strong id="metric-memories">-</strong>
+            </div>
+            <div class="stat-item">
+              <span>存储位置</span>
+              <strong id="metric-data-root">-</strong>
+            </div>
+          </div>
         </section>
       </aside>
 
       <main class="main">
-        <header class="hero panel" id="overview">
+        <header class="hero panel">
           <div>
-            <p class="eyebrow">Control Surface</p>
-            <h2>VaultMind 服务控制台</h2>
+            <p class="eyebrow">Minimal Console</p>
+            <h2>记忆管理台</h2>
             <p id="ready-summary" class="hero-copy">正在读取服务状态…</p>
-          </div>
-          <div class="hero-actions">
-            <a class="button button-secondary" href="/docs" target="_blank" rel="noreferrer">API Docs</a>
-            <button id="refresh-overview" class="button button-primary" type="button">刷新概览</button>
           </div>
         </header>
 
-        <section class="stats-grid">
-          <article class="metric-card panel">
-            <p class="metric-label">服务状态</p>
-            <p class="metric-value" id="metric-service">-</p>
-            <p class="metric-meta" id="metric-data-root">-</p>
-          </article>
-          <article class="metric-card panel">
-            <p class="metric-label">待处理候选</p>
-            <p class="metric-value" id="metric-pending">-</p>
-            <p class="metric-meta">当前 Agent</p>
-          </article>
-          <article class="metric-card panel">
-            <p class="metric-label">Committed Memory</p>
-            <p class="metric-value" id="metric-memories">-</p>
-            <p class="metric-meta">总记忆数</p>
-          </article>
-          <article class="metric-card panel">
-            <p class="metric-label">Active Context</p>
-            <p class="metric-value" id="metric-contexts">-</p>
-            <p class="metric-meta">已登记 session</p>
-          </article>
+        <section class="panel toolbar">
+          <div class="toolbar-main">
+            <label class="field field-grow">
+              <span>搜索记忆</span>
+              <input id="memory-query" type="text" placeholder="按 summary、body、tags、entities 搜索" />
+            </label>
+            <label class="field field-compact">
+              <span>类型</span>
+              <select id="memory-type-filter">
+                <option value="">全部</option>
+                <option value="semantic">semantic</option>
+                <option value="relational">relational</option>
+                <option value="opinion">opinion</option>
+              </select>
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="list-memories" class="button button-secondary" type="button">查询</button>
+            <button id="clear-filters" class="button button-secondary" type="button">清空筛选</button>
+          </div>
         </section>
 
-        <section class="workspace-grid">
-          <section class="panel section-card" id="retrieval">
+        <section class="workspace">
+          <section class="panel list-panel">
             <div class="panel-title-row">
               <div>
-                <p class="eyebrow">Search</p>
-                <h2>检索实验室</h2>
+                <p class="eyebrow">Memories</p>
+                <h2>记忆列表</h2>
               </div>
-              <button id="run-retrieval" class="button button-primary" type="button">开始检索</button>
+              <span id="memory-count" class="badge">0 条</span>
             </div>
-            <div class="form-grid">
+            <div id="memory-list" class="list-column empty-state">当前还没有记忆。</div>
+          </section>
+
+          <section class="panel editor-panel">
+            <div class="panel-title-row">
+              <div>
+                <p class="eyebrow">Editor</p>
+                <h2 id="editor-title">手动导入</h2>
+              </div>
+              <span id="editor-status" class="badge badge-soft">新建</span>
+            </div>
+
+            <form id="memory-form" class="editor-form">
               <label class="field field-span-2">
-                <span>查询</span>
-                <textarea id="retrieve-query" rows="3" placeholder="例如：上次关于部署的决定是什么？"></textarea>
+                <span>摘要</span>
+                <input id="form-summary" type="text" placeholder="一句话概括这条记忆" required />
               </label>
+
               <label class="field">
-                <span>模式</span>
-                <select id="retrieve-mode">
-                  <option value="auto">auto</option>
-                  <option value="lightweight">lightweight</option>
-                  <option value="agentic">agentic</option>
+                <span>类型</span>
+                <select id="form-memory-type">
+                  <option value="semantic">semantic</option>
+                  <option value="relational">relational</option>
+                  <option value="opinion">opinion</option>
                 </select>
               </label>
+
               <label class="field">
-                <span>Limit</span>
-                <input id="retrieve-limit" type="number" min="1" max="20" value="5" />
+                <span>Session</span>
+                <input id="form-session-id" type="text" placeholder="例如 hermes_session" />
               </label>
+
               <label class="field">
-                <span>Session ID</span>
-                <input id="retrieve-session" type="text" placeholder="可选" />
+                <span>时间</span>
+                <input id="form-timestamp" type="datetime-local" />
               </label>
+
               <label class="field">
-                <span>Current Topic</span>
-                <input id="retrieve-topic" type="text" placeholder="可选" />
+                <span>来源</span>
+                <input id="form-source-type" type="text" placeholder="默认 console-import" />
               </label>
+
               <label class="field field-span-2">
-                <span>Memory Types</span>
-                <div class="chip-row">
-                  <label class="chip"><input type="checkbox" value="semantic" />semantic</label>
-                  <label class="chip"><input type="checkbox" value="relational" />relational</label>
-                  <label class="chip"><input type="checkbox" value="opinion" />opinion</label>
-                  <label class="chip"><input id="retrieve-body" type="checkbox" />include body</label>
-                </div>
+                <span>标签</span>
+                <input id="form-tags" type="text" placeholder="例如 hermes, 约束, 风格" />
               </label>
-            </div>
-            <div id="retrieval-results" class="result-stack empty-state">检索结果会显示在这里。</div>
-          </section>
 
-          <section class="panel section-card" id="memories">
-            <div class="panel-title-row">
-              <div>
-                <p class="eyebrow">Browse</p>
-                <h2>记忆浏览</h2>
-              </div>
-              <button id="list-memories" class="button button-secondary" type="button">刷新列表</button>
-            </div>
-            <div class="form-grid compact-grid">
-              <label class="field">
-                <span>Query</span>
-                <input id="memory-query" type="text" placeholder="按 summary / tags / entities 筛选" />
-              </label>
-              <label class="field">
-                <span>Tag</span>
-                <input id="memory-tags" type="text" placeholder="逗号分隔" />
-              </label>
-              <label class="field">
-                <span>Entity</span>
-                <input id="memory-entities" type="text" placeholder="逗号分隔" />
-              </label>
-              <label class="field">
-                <span>Limit</span>
-                <input id="memory-limit" type="number" min="1" max="200" value="12" />
-              </label>
-            </div>
-            <div class="split-pane">
-              <div id="memory-list" class="list-column empty-state">记忆列表会显示在这里。</div>
-              <article id="memory-detail" class="detail-column empty-state">点击左侧某条记忆查看详情。</article>
-            </div>
-          </section>
-
-          <section class="panel section-card" id="candidates">
-            <div class="panel-title-row">
-              <div>
-                <p class="eyebrow">Queue</p>
-                <h2>候选队列</h2>
-              </div>
-              <div class="button-row">
-                <button id="load-pending" class="button button-secondary" type="button">仅看 Pending</button>
-                <button id="load-all-candidates" class="button button-secondary" type="button">全部</button>
-              </div>
-            </div>
-            <div id="candidate-list" class="result-stack empty-state">候选列表会显示在这里。</div>
-          </section>
-
-          <section class="panel section-card" id="context">
-            <div class="panel-title-row">
-              <div>
-                <p class="eyebrow">Session</p>
-                <h2>Active Context</h2>
-              </div>
-              <div class="button-row">
-                <button id="load-context" class="button button-secondary" type="button">读取</button>
-                <button id="refresh-context" class="button button-primary" type="button">自动刷新</button>
-                <button id="reset-context" class="button button-danger" type="button">重置</button>
-              </div>
-            </div>
-            <div class="form-grid compact-grid">
               <label class="field field-span-2">
-                <span>Session ID</span>
-                <input id="context-session" type="text" placeholder="输入 session_id" />
+                <span>实体</span>
+                <input id="form-entities" type="text" placeholder="例如 Hermes, VaultMind" />
               </label>
-              <label class="field field-span-2">
-                <span>Current Topic</span>
-                <input id="context-topic" type="text" placeholder="留空则自动推断 recent memories" />
-              </label>
-            </div>
-            <pre id="context-result" class="json-block">等待读取 active context…</pre>
-          </section>
 
-          <section class="panel section-card" id="maintenance">
-            <div class="panel-title-row">
-              <div>
-                <p class="eyebrow">Maintenance</p>
-                <h2>维护操作</h2>
+              <label class="field field-span-2">
+                <span>正文</span>
+                <textarea id="form-body" rows="10" placeholder="把要保存的内容贴进来"></textarea>
+              </label>
+
+              <div class="button-row field-span-2">
+                <button id="save-memory" class="button button-primary" type="submit">保存</button>
+                <button id="reset-editor" class="button button-secondary" type="button">清空</button>
+                <button id="delete-memory" class="button button-danger" type="button">删除</button>
               </div>
-            </div>
-            <div class="button-row">
-              <button id="flush-queue" class="button button-primary" type="button">Flush Queue</button>
-              <button id="rebuild-index" class="button button-secondary" type="button">Rebuild Index</button>
-            </div>
-            <pre id="maintenance-result" class="json-block">维护操作结果会显示在这里。</pre>
+            </form>
+
+            <article id="memory-detail" class="detail-card">
+              <p class="detail-empty">选择左侧记忆后，这里会显示它的时间、类型、标签和正文概览。</p>
+            </article>
           </section>
         </section>
       </main>

@@ -17,6 +17,10 @@ def _headers(agent: str) -> dict[str, str]:
     return {"X-Api-Key": key_map[agent], "X-Agent-Id": agent}
 
 
+def _agent_only_headers(agent: str) -> dict[str, str]:
+    return {"X-Agent-Id": agent}
+
+
 def test_candidate_commit_retrieve_and_isolation(tmp_path: Path) -> None:
     settings = Settings(data_root=tmp_path / "data")
     client = TestClient(create_app(settings))
@@ -241,6 +245,10 @@ def test_direct_memory_create_patch_and_delete(tmp_path: Path) -> None:
     patch_response = client.patch(
         f"/api/v1/memory/{memory_id}",
         json={
+            "memory_type": "opinion",
+            "session_id": "hermes_memory_session_updated",
+            "timestamp": "2026-04-02T22:15",
+            "source_type": "console-import",
             "summary": "Hermes should keep replies very concise.",
             "body": "Hermes should keep replies very concise.",
             "tags": ["hermes", "hermes-memory", "hermes-target:memory", "updated"],
@@ -251,6 +259,9 @@ def test_direct_memory_create_patch_and_delete(tmp_path: Path) -> None:
     patched = patch_response.json()
     assert patched["summary"] == "Hermes should keep replies very concise."
     assert patched["body"] == "Hermes should keep replies very concise."
+    assert patched["memory_type"] == "opinion"
+    assert patched["session_id"] == "hermes_memory_session_updated"
+    assert patched["timestamp"] == "2026-04-02T22:15"
     assert "updated" in patched["tags"]
 
     delete_response = client.delete(f"/api/v1/memory/{memory_id}", headers=_headers("nexus"))
@@ -261,6 +272,39 @@ def test_direct_memory_create_patch_and_delete(tmp_path: Path) -> None:
     assert missing_response.status_code == 404
 
 
+def test_agent_header_auth_without_api_key(tmp_path: Path) -> None:
+    settings = Settings(data_root=tmp_path / "data")
+    client = TestClient(create_app(settings))
+
+    create_response = client.post(
+        "/api/v1/memory/create",
+        json={
+            "session_id": "manual_console_session",
+            "memory_type": "semantic",
+            "summary": "Manual console imports should work without an API key in development.",
+            "body": "Agent-only authentication should be enough for the lightweight console.",
+        },
+        headers=_agent_only_headers("nexus"),
+    )
+    assert create_response.status_code == 200
+    memory_id = create_response.json()["id"]
+
+    list_response = client.post(
+        "/api/v1/memory/list",
+        json={"limit": 10},
+        headers=_agent_only_headers("nexus"),
+    )
+    assert list_response.status_code == 200
+    assert any(item["id"] == memory_id for item in list_response.json())
+
+    invalid_agent_response = client.post(
+        "/api/v1/memory/list",
+        json={"limit": 10},
+        headers=_agent_only_headers("unknown"),
+    )
+    assert invalid_agent_response.status_code == 401
+
+
 def test_console_routes_are_served(tmp_path: Path) -> None:
     settings = Settings(data_root=tmp_path / "data")
     client = TestClient(create_app(settings))
@@ -268,6 +312,7 @@ def test_console_routes_are_served(tmp_path: Path) -> None:
     page_response = client.get("/console")
     assert page_response.status_code == 200
     assert "VaultMind Console" in page_response.text
+    assert "手动导入" in page_response.text
 
     asset_response = client.get("/console/assets/console.js")
     assert asset_response.status_code == 200

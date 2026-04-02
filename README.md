@@ -35,8 +35,8 @@ memoryos-api
 
 认证头：
 
-- `X-Api-Key`
 - `X-Agent-Id`
+- `X-Api-Key`（严格模式下必需；开发/自托管默认可省略）
 
 常用接口：
 
@@ -168,13 +168,18 @@ export no_proxy="$NO_PROXY"
 
 控制台第一版提供：
 
-- Agent 选择与 API Key 本地保存
-- 服务概览与基础统计
-- 记忆检索实验室
-- Memory 浏览与详情查看
-- Candidate 队列查看
-- Active Context 读取、刷新、重置
-- Flush queue / rebuild index 等维护动作
+- Agent 切换与轻量连接状态
+- 手动导入记忆
+- Memory 列表浏览
+- 单条记忆详情查看
+- 记忆编辑与删除
+
+当前控制台默认走“轻量管理台”路线，不再暴露检索实验室、候选队列、active context 和维护操作。
+
+默认情况下：
+
+- `development` / 自托管模式下，只选 Agent 即可使用控制台
+- 如果将 `MEMORYOS_APP_ENV=production` 或显式关闭 `allow_agent_header_auth`，控制台会自动切换为需要 API key 的严格模式
 
 ## Hermes Client
 
