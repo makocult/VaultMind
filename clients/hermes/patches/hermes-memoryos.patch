@@ -1,0 +1,392 @@
+diff --git a/tests/tools/test_memory_tool.py b/tests/tools/test_memory_tool.py
+index 48cb6a83..eb652aeb 100644
+--- a/tests/tools/test_memory_tool.py
++++ b/tests/tools/test_memory_tool.py
+@@ -226,6 +226,65 @@ class TestMemoryStoreSnapshot:
+         assert store.format_for_system_prompt("memory") is None
+ 
+ 
++class _FakeRemoteClient:
++    def __init__(self):
++        self.entries = {
++            "memory": ["Remote project uses MemoryOS"],
++            "user": ["User prefers concise replies"],
++        }
++
++    def load_target_entries(self, target):
++        return list(self.entries[target])
++
++    def add_entry(self, target, content):
++        self.entries[target].append(content)
++
++    def replace_entry(self, target, old_text, new_content):
++        for index, entry in enumerate(self.entries[target]):
++            if old_text in entry:
++                self.entries[target][index] = new_content
++                return
++        raise ValueError(f"No entry matched '{old_text}'.")
++
++    def remove_entry(self, target, old_text):
++        for index, entry in enumerate(self.entries[target]):
++            if old_text in entry:
++                self.entries[target].pop(index)
++                return
++        raise ValueError(f"No entry matched '{old_text}'.")
++
++
++class TestMemoryStoreMemoryOSBackend:
++    def test_remote_backend_loads_and_adds_entries(self, monkeypatch):
++        fake = _FakeRemoteClient()
++        monkeypatch.setattr("tools.memory_tool.MemoryOSClient.from_env", lambda: fake)
++
++        store = MemoryStore(memory_char_limit=500, user_char_limit=300)
++        store.load_from_disk()
++
++        snapshot = store.format_for_system_prompt("memory")
++        assert "Remote project uses MemoryOS" in snapshot
++
++        result = store.add("memory", "Hermes memory now writes to MemoryOS")
++        assert result["success"] is True
++        assert "Hermes memory now writes to MemoryOS" in fake.entries["memory"]
++
++    def test_remote_backend_replace_and_remove_entries(self, monkeypatch):
++        fake = _FakeRemoteClient()
++        monkeypatch.setattr("tools.memory_tool.MemoryOSClient.from_env", lambda: fake)
++
++        store = MemoryStore(memory_char_limit=500, user_char_limit=300)
++        store.load_from_disk()
++
++        replaced = store.replace("user", "concise", "User prefers very concise replies")
++        assert replaced["success"] is True
++        assert fake.entries["user"] == ["User prefers very concise replies"]
++
++        removed = store.remove("memory", "Remote project")
++        assert removed["success"] is True
++        assert fake.entries["memory"] == []
++
++
+ # =========================================================================
+ # memory_tool() dispatcher
+ # =========================================================================
+diff --git a/tools/memory_tool.py b/tools/memory_tool.py
+index 2d687e94..05764b1a 100644
+--- a/tools/memory_tool.py
++++ b/tools/memory_tool.py
+@@ -34,12 +34,24 @@ from pathlib import Path
+ from hermes_constants import get_hermes_home
+ from typing import Dict, Any, List, Optional
+ 
++import requests
++
+ logger = logging.getLogger(__name__)
+ 
+ # Where memory files live
+ MEMORY_DIR = get_hermes_home() / "memories"
+ 
+ ENTRY_DELIMITER = "\n§\n"
++MEMORYOS_CREATE_LIMIT = 200
++MEMORYOS_SOURCE_TYPE = "hermes-memory-tool"
++MEMORYOS_TAGS = {
++    "memory": ["hermes", "hermes-memory", "hermes-target:memory"],
++    "user": ["hermes", "hermes-user-profile", "hermes-target:user"],
++}
++MEMORYOS_MEMORY_TYPES = {
++    "memory": "semantic",
++    "user": "opinion",
++}
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -103,15 +115,19 @@ class MemoryStore:
+         self.user_entries: List[str] = []
+         self.memory_char_limit = memory_char_limit
+         self.user_char_limit = user_char_limit
++        self._remote_client = MemoryOSClient.from_env()
+         # Frozen snapshot for system prompt -- set once at load_from_disk()
+         self._system_prompt_snapshot: Dict[str, str] = {"memory": "", "user": ""}
+ 
+     def load_from_disk(self):
+         """Load entries from MEMORY.md and USER.md, capture system prompt snapshot."""
+-        MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+-
+-        self.memory_entries = self._read_file(MEMORY_DIR / "MEMORY.md")
+-        self.user_entries = self._read_file(MEMORY_DIR / "USER.md")
++        if self._remote_client:
++            self.memory_entries = self._remote_client.load_target_entries("memory")
++            self.user_entries = self._remote_client.load_target_entries("user")
++        else:
++            MEMORY_DIR.mkdir(parents=True, exist_ok=True)
++            self.memory_entries = self._read_file(MEMORY_DIR / "MEMORY.md")
++            self.user_entries = self._read_file(MEMORY_DIR / "USER.md")
+ 
+         # Deduplicate entries (preserves order, keeps first occurrence)
+         self.memory_entries = list(dict.fromkeys(self.memory_entries))
+@@ -152,12 +168,17 @@ class MemoryStore:
+ 
+         Called under file lock to get the latest state before mutating.
+         """
+-        fresh = self._read_file(self._path_for(target))
++        if self._remote_client:
++            fresh = self._remote_client.load_target_entries(target)
++        else:
++            fresh = self._read_file(self._path_for(target))
+         fresh = list(dict.fromkeys(fresh))  # deduplicate
+         self._set_entries(target, fresh)
+ 
+     def save_to_disk(self, target: str):
+         """Persist entries to the appropriate file. Called after every mutation."""
++        if self._remote_client:
++            return
+         MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+         self._write_file(self._path_for(target), self._entries_for(target))
+ 
+@@ -194,6 +215,40 @@ class MemoryStore:
+         if scan_error:
+             return {"success": False, "error": scan_error}
+ 
++        if self._remote_client:
++            try:
++                self._reload_target(target)
++                entries = self._entries_for(target)
++                limit = self._char_limit(target)
++
++                if content in entries:
++                    return self._success_response(target, "Entry already exists (no duplicate added).")
++
++                new_entries = entries + [content]
++                new_total = len(ENTRY_DELIMITER.join(new_entries))
++                if new_total > limit:
++                    current = self._char_count(target)
++                    return {
++                        "success": False,
++                        "error": (
++                            f"Memory at {current:,}/{limit:,} chars. "
++                            f"Adding this entry ({len(content)} chars) would exceed the limit. "
++                            f"Replace or remove existing entries first."
++                        ),
++                        "current_entries": entries,
++                        "usage": f"{current:,}/{limit:,}",
++                    }
++
++                self._remote_client.add_entry(target, content)
++                self._reload_target(target)
++            except ValueError as exc:
++                return {"success": False, "error": str(exc)}
++            except Exception as exc:
++                logger.exception("MemoryOS add failed for target=%s", target)
++                return {"success": False, "error": f"MemoryOS backend unavailable: {exc}"}
++
++            return self._success_response(target, "Entry added.")
++
+         with self._file_lock(self._path_for(target)):
+             # Re-read from disk under lock to pick up writes from other sessions
+             self._reload_target(target)
+@@ -242,6 +297,19 @@ class MemoryStore:
+         if scan_error:
+             return {"success": False, "error": scan_error}
+ 
++        if self._remote_client:
++            try:
++                self._reload_target(target)
++                self._remote_client.replace_entry(target, old_text, new_content)
++                self._reload_target(target)
++            except ValueError as exc:
++                return {"success": False, "error": str(exc)}
++            except Exception as exc:
++                logger.exception("MemoryOS replace failed for target=%s", target)
++                return {"success": False, "error": f"MemoryOS backend unavailable: {exc}"}
++
++            return self._success_response(target, "Entry replaced.")
++
+         with self._file_lock(self._path_for(target)):
+             self._reload_target(target)
+ 
+@@ -292,6 +360,19 @@ class MemoryStore:
+         if not old_text:
+             return {"success": False, "error": "old_text cannot be empty."}
+ 
++        if self._remote_client:
++            try:
++                self._reload_target(target)
++                self._remote_client.remove_entry(target, old_text)
++                self._reload_target(target)
++            except ValueError as exc:
++                return {"success": False, "error": str(exc)}
++            except Exception as exc:
++                logger.exception("MemoryOS remove failed for target=%s", target)
++                return {"success": False, "error": f"MemoryOS backend unavailable: {exc}"}
++
++            return self._success_response(target, "Entry removed.")
++
+         with self._file_lock(self._path_for(target)):
+             self._reload_target(target)
+ 
+@@ -424,6 +505,162 @@ class MemoryStore:
+             raise RuntimeError(f"Failed to write memory file {path}: {e}")
+ 
+ 
++class MemoryOSClient:
++    """Exact-entry MemoryOS backend for Hermes persistent memory."""
++
++    def __init__(
++        self,
++        *,
++        base_url: str,
++        fallback_url: Optional[str],
++        api_key: str,
++        agent_id: str,
++        timeout: float = 5.0,
++    ):
++        urls = [base_url.rstrip("/")]
++        if fallback_url:
++            normalized = fallback_url.rstrip("/")
++            if normalized not in urls:
++                urls.append(normalized)
++        self.base_urls = urls
++        self.api_key = api_key
++        self.agent_id = agent_id
++        self.timeout = timeout
++        self.session = requests.Session()
++        self.session.headers.update(
++            {
++                "X-Api-Key": api_key,
++                "X-Agent-Id": agent_id,
++                "Content-Type": "application/json",
++            }
++        )
++
++    @classmethod
++    def from_env(cls) -> Optional["MemoryOSClient"]:
++        base_url = (os.getenv("MEMORYOS_BASE_URL") or "").strip()
++        fallback_url = (os.getenv("MEMORYOS_FALLBACK_URL") or "").strip() or None
++        api_key = (os.getenv("MEMORYOS_API_KEY") or "").strip()
++        agent_id = (os.getenv("MEMORYOS_AGENT_ID") or "").strip()
++        timeout_raw = (os.getenv("MEMORYOS_TIMEOUT_SECONDS") or "5").strip()
++        try:
++            timeout = float(timeout_raw)
++        except ValueError:
++            timeout = 5.0
++        if not api_key or not agent_id or not (base_url or fallback_url):
++            return None
++        effective_base = base_url or fallback_url
++        return cls(
++            base_url=effective_base,
++            fallback_url=fallback_url if effective_base != fallback_url else None,
++            api_key=api_key,
++            agent_id=agent_id,
++            timeout=timeout,
++        )
++
++    def load_target_entries(self, target: str) -> List[str]:
++        records = self._list_target_records(target)
++        return [self._entry_text(record) for record in records if self._entry_text(record)]
++
++    def add_entry(self, target: str, content: str) -> None:
++        payload = {
++            "session_id": self._session_id(target),
++            "memory_type": MEMORYOS_MEMORY_TYPES[target],
++            "source_type": MEMORYOS_SOURCE_TYPE,
++            "source_ref": f"hermes://memory/{target}",
++            "summary": self._summary_for(content),
++            "body": content,
++            "tags": MEMORYOS_TAGS[target],
++            "stability": "high" if target == "user" else "medium",
++            "importance": 0.85 if target == "user" else 0.75,
++            "confidence": 0.95,
++            "consistency_score": 0.9,
++        }
++        self._request("POST", "/api/v1/memory/create", json=payload)
++
++    def replace_entry(self, target: str, old_text: str, new_content: str) -> None:
++        record = self._resolve_unique_record(target, old_text)
++        payload = {
++            "summary": self._summary_for(new_content),
++            "body": new_content,
++            "tags": MEMORYOS_TAGS[target],
++        }
++        self._request("PATCH", f"/api/v1/memory/{record['id']}", json=payload)
++
++    def remove_entry(self, target: str, old_text: str) -> None:
++        record = self._resolve_unique_record(target, old_text)
++        self._request("DELETE", f"/api/v1/memory/{record['id']}")
++
++    def _resolve_unique_record(self, target: str, old_text: str) -> Dict[str, Any]:
++        old_text = old_text.strip()
++        if not old_text:
++            raise ValueError("old_text cannot be empty.")
++
++        records = self._list_target_records(target)
++        matches = [(record, self._entry_text(record)) for record in records if old_text in self._entry_text(record)]
++        if not matches:
++            raise ValueError(f"No entry matched '{old_text}'.")
++        if len(matches) > 1:
++            unique_texts = {text for _, text in matches}
++            if len(unique_texts) > 1:
++                raise ValueError(f"Multiple entries matched '{old_text}'. Be more specific.")
++        return matches[0][0]
++
++    def _list_target_records(self, target: str) -> List[Dict[str, Any]]:
++        listed = self._request(
++            "POST",
++            "/api/v1/memory/list",
++            json={
++                "limit": MEMORYOS_CREATE_LIMIT,
++                "tags": [MEMORYOS_TAGS[target][1]],
++            },
++        )
++        records = []
++        for item in listed:
++            record = self._request("GET", f"/api/v1/memory/{item['id']}")
++            if self._target_tag(target) in record.get("tags", []):
++                records.append(record)
++        records.sort(key=lambda record: (record.get("timestamp") or "", record.get("created_at") or "", record["id"]))
++        return records
++
++    def _request(self, method: str, path: str, *, json: Dict[str, Any] = None) -> Any:
++        last_error: Optional[str] = None
++        for base_url in self.base_urls:
++            url = f"{base_url}{path}"
++            try:
++                response = self.session.request(method, url, json=json, timeout=self.timeout)
++                response.raise_for_status()
++                if response.content:
++                    return response.json()
++                return None
++            except requests.RequestException as exc:
++                last_error = f"{url}: {exc}"
++        raise RuntimeError(last_error or f"MemoryOS request failed for {path}")
++
++    @staticmethod
++    def _entry_text(record: Dict[str, Any]) -> str:
++        body = (record.get("body") or "").strip()
++        if body:
++            return body
++        return (record.get("summary") or "").strip()
++
++    @staticmethod
++    def _summary_for(content: str) -> str:
++        summary = re.sub(r"\s+", " ", content.strip())
++        if len(summary) <= 160:
++            return summary
++        return summary[:157].rstrip() + "..."
++
++    def _session_id(self, target: str) -> str:
++        explicit = (os.getenv("MEMORYOS_SESSION_ID") or os.getenv("HERMES_MEMORY_SESSION_ID") or "").strip()
++        if explicit:
++            return explicit
++        return f"hermes-memory:{self.agent_id}:{target}"
++
++    @staticmethod
++    def _target_tag(target: str) -> str:
++        return MEMORYOS_TAGS[target][2]
++
++
+ def memory_tool(
+     action: str,
+     target: str = "memory",
+@@ -544,5 +781,3 @@ registry.register(
+ )
+ 
+ 
+-
+-

@@ -17,9 +17,12 @@
 配套 skill 位于：
 
 - [SKILL.md](/Users/mako/Lab/VaultMind/clients/hermes/skills/memoryos/SKILL.md)
+- [Hermes Patch](/Users/mako/Lab/VaultMind/clients/hermes/patches/hermes-memoryos.patch)
 
 这份 skill 主要用于：
 
 - 告诉 Hermes 当前环境里 `memory` 已由 MemoryOS 接管
 - 约束模型继续使用原生 `memory` 工具接口，而不是自己发明一套新流程
 - 在需要排查时提供调试命令
+
+补丁文件则用于把 Hermes 自带的 `tools/memory_tool.py` 切换为 MemoryOS 后端优先、文件后端回退的兼容实现。
