@@ -68,6 +68,8 @@ memoryos-api
 ./scripts/start_api.sh
 ./scripts/run_worker_once.sh nexus
 ./scripts/install_user_service.sh
+./scripts/install_agent_access_env.sh
+./scripts/check_memoryos_access.sh
 ```
 
 推荐宿主机目录：
@@ -113,6 +115,48 @@ systemctl --user enable --now memoryos-worker.timer
 systemctl --user status memoryos-api.service
 journalctl --user -u memoryos-api.service -n 100 --no-pager
 ```
+
+## Agent Access
+
+对运行在 `wisepulse` 同一台机器上的 Agent，推荐永远优先使用：
+
+```text
+http://127.0.0.1:8765
+```
+
+这样可以绕开代理、ACL 和外网路由变量，稳定性最高。
+
+对不在同机、但在同一 Tailscale tailnet 内的 Agent，使用：
+
+```text
+http://100.93.59.21:8765
+```
+
+并确保设置：
+
+```bash
+export NO_PROXY=127.0.0.1,localhost,100.93.59.21,wisepulse.tail925b8e.ts.net
+export no_proxy="$NO_PROXY"
+```
+
+仓库里提供了 Agent 访问模板和自检脚本：
+
+- [agent-access.env.example](/Users/mako/Lab/VaultMind/config/agent-access.env.example)
+- [install_agent_access_env.sh](/Users/mako/Lab/VaultMind/scripts/install_agent_access_env.sh)
+- [check_memoryos_access.sh](/Users/mako/Lab/VaultMind/scripts/check_memoryos_access.sh)
+
+示例：
+
+```bash
+./scripts/install_agent_access_env.sh
+./scripts/check_memoryos_access.sh ~/.config/memoryos-agent.env
+```
+
+当前已确认：
+
+- `http://127.0.0.1:8765/readyz` 在服务器本机可访问
+- `http://100.93.59.21:8765/readyz` 在 tailnet 对等端可访问
+- 如果客户端启用了 `HTTP_PROXY`/`HTTPS_PROXY`，必须通过 `NO_PROXY` 排除这两个地址
 
 ## Remote Status
 
