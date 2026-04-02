@@ -22,6 +22,7 @@
 
 当前配套 skill 位于：
 
+- [Memory Category Description](/Users/mako/Lab/VaultMind/clients/hermes/skills/memory/DESCRIPTION.md)
 - [VaultMind Skill](/Users/mako/Lab/VaultMind/clients/hermes/skills/vaultmind/SKILL.md)
 - [VaultMind Script](/Users/mako/Lab/VaultMind/clients/hermes/skills/vaultmind/scripts/vaultmind_memory.py)
 - [VaultMind Env Example](/Users/mako/Lab/VaultMind/clients/hermes/vaultmind.env.example)
@@ -31,3 +32,9 @@
 - 让 Hermes 明确知道 VaultMind 是并行记忆，而不是默认 memory 的替代品
 - 提供可直接从 `terminal` 工具调用的记忆脚本
 - 避免对 Hermes 上游源码做任何侵入式修改
+
+为了让 Hermes 真正“意识到”自己有两套记忆，推荐使用三层提示：
+
+1. `SOUL.md` 中加入常驻规则：明确说明原生 `memory` 和 VaultMind 的分工。
+2. Hermes 原生 `MEMORY.md` 中加入一条稳定事实：提醒自己遇到历史/项目上下文问题时优先考虑查 VaultMind。
+3. skill 索引层加入 `memory/DESCRIPTION.md` 和 `vaultmind/SKILL.md`：让技能列表本身也写清楚“两套并行记忆”的关系。

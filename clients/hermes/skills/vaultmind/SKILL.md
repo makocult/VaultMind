@@ -1,18 +1,20 @@
 ---
 name: vaultmind
-description: Use VaultMind as a parallel long-term memory system alongside Hermes native memory.
+description: You have two memory systems here: Hermes native memory and VaultMind. Use VaultMind as the parallel external memory, not a replacement.
 version: 1.0.0
 author: VaultMind
 license: MIT
-platforms: [linux, macos]
-metadata:
-  hermes:
-    tags: [memory, vaultmind, retrieval, long-term-memory]
+platforms: linux
 ---
 
 # VaultMind Parallel Memory
 
-In this Hermes installation, VaultMind is a second memory system that runs in parallel with Hermes native `memory`.
+You have two memory systems in this Hermes environment:
+
+- Hermes native `memory`
+- VaultMind parallel memory
+
+VaultMind is the external parallel memory system. It does not replace Hermes native `memory`.
 
 ## Core Rule
 
